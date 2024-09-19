@@ -1,12 +1,11 @@
 {
-"name": "threejs-solar-system",
+  "name": "threejs-solar-system",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "vite build"
   },
   "devDependencies": {
     "@types/three": "^0.154.0",
