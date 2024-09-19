@@ -28,7 +28,8 @@ const sizes = {
   height: window.innerHeight,
 };
 
-window.addEventListener("resize", () => {
+// Resize handler
+const handleResize = () => {
   sizes.width = window.innerWidth;
   sizes.height = window.innerHeight;
   camera.aspect = sizes.width / sizes.height;
@@ -37,14 +38,15 @@ window.addEventListener("resize", () => {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   bloomComposer.setSize(sizes.width, sizes.height);
   labelRenderer.setSize(sizes.width, sizes.height);
-});
+};
+
+window.addEventListener("resize", handleResize);
 
 // Solar system
 const [solarSystem, planetNames] = createSolarSystem(scene);
 
 // Camera
-const aspect = sizes.width / sizes.height;
-const camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 1000);
 camera.position.set(0, 20, 0);
 solarSystem["Sun"].mesh.add(camera);
 
@@ -73,6 +75,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+// Bloom effect
 const renderScene = new RenderPass(scene, camera);
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(sizes.width, sizes.height),
@@ -80,20 +83,19 @@ const bloomPass = new UnrealBloomPass(
   0,
   1
 );
-
 const bloomComposer = new EffectComposer(renderer);
 bloomComposer.setSize(sizes.width, sizes.height);
 bloomComposer.renderToScreen = true;
 bloomComposer.addPass(renderScene);
 bloomComposer.addPass(bloomPass);
 
-// Animate
+// Animation
 const clock = new THREE.Clock();
 let elapsedTime = 0;
 
 fakeCamera.layers.enable(1); // Assuming LAYERS.POILabel = 1
 
-(function tick() {
+const animate = () => {
   elapsedTime += clock.getDelta();
 
   // Update the solar system objects
@@ -115,6 +117,9 @@ fakeCamera.layers.enable(1); // Assuming LAYERS.POILabel = 1
   bloomComposer.render();
   labelRenderer.render(scene, camera);
 
-  // Call tick again on the next frame
-  window.requestAnimationFrame(tick);
-})();
+  // Call animate again on the next frame
+  requestAnimationFrame(animate);
+};
+
+// Start the animation
+animate();
