@@ -1,125 +1,185 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { createEnvironmentMap } from "./setup/environment-map";
-import { createLights } from "./setup/lights";
-import { createSolarSystem } from "./setup/solar-system";
 
 // Disable color management
 THREE.ColorManagement.enabled = false;
 
-// Canvas
-const canvas = document.querySelector("canvas.webgl") as HTMLElement;
+// Check WebGL support
+function checkWebGLSupport(): boolean {
+  const canvas = document.createElement('canvas');
+  return !!(window.WebGLRenderingContext && (canvas.getContext('webgl') || canvas.getContext('experimental-webgl')));
+}
 
-// Scene
-const scene = new THREE.Scene();
-scene.background = createEnvironmentMap("./textures/environment");
+// Create environment map
+function createEnvironmentMap(path: string): THREE.CubeTexture {
+  const loader = new THREE.CubeTextureLoader();
+  const texture = loader.load([
+    `${path}/px.jpg`, `${path}/nx.jpg`,
+    `${path}/py.jpg`, `${path}/ny.jpg`,
+    `${path}/pz.jpg`, `${path}/nz.jpg`
+  ]);
+  return texture;
+}
 
-// Lights
-const [ambientLight, pointLight] = createLights();
-scene.add(ambientLight, pointLight);
+// Create lights
+function createLights(): [THREE.AmbientLight, THREE.PointLight] {
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
+  const pointLight = new THREE.PointLight(0xffffff, 1);
+  pointLight.position.set(0, 0, 0);
+  return [ambientLight, pointLight];
+}
 
-// Sizes
-const sizes = {
-  width: window.innerWidth,
-  height: window.innerHeight,
-};
+// Create a planet
+function createPlanet(name: string, radius: number, texture: string, position: THREE.Vector3): THREE.Mesh {
+  const geometry = new THREE.SphereGeometry(radius, 32, 32);
+  const material = new THREE.MeshStandardMaterial({
+    map: new THREE.TextureLoader().load(texture)
+  });
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.position.copy(position);
+  
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = name;
+  const labelObject = new CSS2DObject(label);
+  labelObject.position.set(0, radius + 0.5, 0);
+  mesh.add(labelObject);
 
-// Resize handler
-const handleResize = () => {
-  sizes.width = window.innerWidth;
-  sizes.height = window.innerHeight;
-  camera.aspect = sizes.width / sizes.height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(sizes.width, sizes.height);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  bloomComposer.setSize(sizes.width, sizes.height);
-  labelRenderer.setSize(sizes.width, sizes.height);
-};
+  return mesh;
+}
 
-window.addEventListener("resize", handleResize);
+// Create solar system
+function createSolarSystem(scene: THREE.Scene): void {
+  const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
+  const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+  scene.add(sun);
 
-// Solar system
-const [solarSystem, planetNames] = createSolarSystem(scene);
+  const planets = [
+    { name: "Mercury", radius: 0.5, texture: "/REAAAL/textures/mercury.jpg", position: new THREE.Vector3(10, 0, 0) },
+    { name: "Venus", radius: 0.8, texture: "/REAAAL/textures/venus.jpg", position: new THREE.Vector3(15, 0, 0) },
+    { name: "Earth", radius: 1, texture: "/REAAAL/textures/earth.jpg", position: new THREE.Vector3(20, 0, 0) },
+    { name: "Mars", radius: 0.7, texture: "/REAAAL/textures/mars.jpg", position: new THREE.Vector3(25, 0, 0) }
+  ];
 
-// Camera
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 1000);
-camera.position.set(0, 20, 0);
-solarSystem["Sun"].mesh.add(camera);
+  planets.forEach(planet => {
+    const mesh = createPlanet(planet.name, planet.radius, planet.texture, planet.position);
+    scene.add(mesh);
+  });
+}
 
-// Controls
-const fakeCamera = camera.clone();
-const controls = new OrbitControls(fakeCamera, canvas);
-controls.target = solarSystem["Sun"].mesh.position;
-controls.enableDamping = true;
-controls.enablePan = false;
-controls.minDistance = solarSystem["Sun"].getMinDistance();
-controls.maxDistance = 50;
+// Main function
+function init() {
+  console.log('Initializing solar system...');
 
-// Label renderer
-const labelRenderer = new CSS2DRenderer();
-labelRenderer.setSize(sizes.width, sizes.height);
-document.body.appendChild(labelRenderer.domElement);
-
-// Renderer
-const renderer = new THREE.WebGLRenderer({
-  canvas: canvas,
-  antialias: true,
-});
-renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
-renderer.setSize(sizes.width, sizes.height);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-// Bloom effect
-const renderScene = new RenderPass(scene, camera);
-const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(sizes.width, sizes.height),
-  0.75,
-  0,
-  1
-);
-const bloomComposer = new EffectComposer(renderer);
-bloomComposer.setSize(sizes.width, sizes.height);
-bloomComposer.renderToScreen = true;
-bloomComposer.addPass(renderScene);
-bloomComposer.addPass(bloomPass);
-
-// Animation
-const clock = new THREE.Clock();
-let elapsedTime = 0;
-
-fakeCamera.layers.enable(1); // Assuming LAYERS.POILabel = 1
-
-const animate = () => {
-  elapsedTime += clock.getDelta();
-
-  // Update the solar system objects
-  for (const object of Object.values(solarSystem)) {
-    object.tick(elapsedTime);
+  if (!checkWebGLSupport()) {
+    console.error('WebGL is not supported in this browser.');
+    const errorMessage = document.createElement('div');
+    errorMessage.textContent = 'WebGL is not supported in this browser. Please try a different browser or device.';
+    document.body.appendChild(errorMessage);
+    return;
   }
 
-  // Update camera
-  camera.copy(fakeCamera);
+  // Canvas
+  const canvas = document.querySelector("canvas.webgl") as HTMLCanvasElement;
+  if (!canvas) {
+    console.error('Cannot find canvas element');
+    return;
+  }
 
-  // Update controls
-  controls.update();
+  // Scene
+  const scene = new THREE.Scene();
+  console.log('Scene created');
 
-  // Update labels
-  const currentBody = solarSystem["Sun"]; // Assuming you want to focus on the Sun
-  currentBody.labels.update(fakeCamera);
+  // Environment map
+  scene.background = createEnvironmentMap("/REAAAL/textures/environment");
+  console.log('Environment map created');
 
-  // Render
-  bloomComposer.render();
-  labelRenderer.render(scene, camera);
+  // Lights
+  const [ambientLight, pointLight] = createLights();
+  scene.add(ambientLight, pointLight);
+  console.log('Lights added');
 
-  // Call animate again on the next frame
-  requestAnimationFrame(animate);
-};
+  // Solar system
+  createSolarSystem(scene);
+  console.log('Solar system created');
 
-// Start the animation
-animate();
+  // Sizes
+  const sizes = {
+    width: window.innerWidth,
+    height: window.innerHeight,
+  };
+
+  // Camera
+  const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 0.1, 1000);
+  camera.position.set(0, 20, 30);
+  scene.add(camera);
+
+  // Controls
+  const controls = new OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+
+  // Renderer
+  const renderer = new THREE.WebGLRenderer({
+    canvas: canvas,
+    antialias: true,
+  });
+  renderer.setSize(sizes.width, sizes.height);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+  // Label renderer
+  const labelRenderer = new CSS2DRenderer();
+  labelRenderer.setSize(sizes.width, sizes.height);
+  labelRenderer.domElement.style.position = 'absolute';
+  labelRenderer.domElement.style.top = '0px';
+  document.body.appendChild(labelRenderer.domElement);
+
+  // Bloom effect
+  const renderScene = new RenderPass(scene, camera);
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(sizes.width, sizes.height), 1.5, 0.4, 0.85);
+  const bloomComposer = new EffectComposer(renderer);
+  bloomComposer.addPass(renderScene);
+  bloomComposer.addPass(bloomPass);
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    sizes.width = window.innerWidth;
+    sizes.height = window.innerHeight;
+
+    camera.aspect = sizes.width / sizes.height;
+    camera.updateProjectionMatrix();
+
+    renderer.setSize(sizes.width, sizes.height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    bloomComposer.setSize(sizes.width, sizes.height);
+    labelRenderer.setSize(sizes.width, sizes.height);
+  });
+
+  // Animation
+  const clock = new THREE.Clock();
+
+  const animate = () => {
+    const elapsedTime = clock.getElapsedTime();
+
+    // Update controls
+    controls.update();
+
+    // Render
+    bloomComposer.render();
+    labelRenderer.render(scene, camera);
+
+    // Call animate again on the next frame
+    window.requestAnimationFrame(animate);
+  };
+
+  animate();
+  console.log('Animation started');
+}
+
+// Start the application
+init();
